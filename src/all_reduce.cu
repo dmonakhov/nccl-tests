@@ -9,10 +9,10 @@
 
 void print_header() {
   PRINT("# %10s  %12s  %6s  %6s            out-of-place                       in-place          \n", "", "", "", "");
-  PRINT("# %10s  %12s  %6s  %6s  %7s  %6s  %6s  %5s  %7s  %6s  %6s  %5s\n", "size", "count", "type", "redop",
-        "time", "algbw", "busbw", "error", "time", "algbw", "busbw", "error");
-  PRINT("# %10s  %12s  %6s  %6s  %7s  %6s  %6s  %5s  %7s  %6s  %6s  %5s\n", "(B)", "(elements)", "", "",
-        "(us)", "(GB/s)", "(GB/s)", "", "(us)", "(GB/s)", "(GB/s)", "");
+  PRINT("# %10s  %12s  %6s  %6s  %7s  %6s  %6s  %5s  %7s  %6s  %6s  %5s  %7s  %7s  %7s  %7s\n", "size", "count", "type", "redop",
+        "time", "algbw", "busbw", "error", "time", "algbw", "busbw", "error", "lat-min", "lat-p50", "lat-p90", "lat-p99");
+  PRINT("# %10s  %12s  %6s  %6s  %7s  %6s  %6s  %5s  %7s  %6s  %6s  %5s  %7s  %7s  %7s  %7s\n", "(B)", "(elements)", "", "",
+        "(us)", "(GB/s)", "(GB/s)", "", "(us)", "(GB/s)", "(GB/s)", "", "(us)", "(us)", "(us)", "(us)");
 }
 
 void print_line_header (size_t size, size_t count, const char *typeName, const char *opName, int root) {

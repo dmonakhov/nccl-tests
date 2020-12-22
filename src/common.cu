@@ -10,6 +10,8 @@
 #include <getopt.h>
 #include <libgen.h>
 #include "cuda.h"
+#include <algorithm>    // std::sort
+#include <vector>       // std::vector
 
 #if NCCL_MAJOR >= 2
 ncclDataType_t test_types[ncclNumTypes] = {ncclInt8, ncclUint8, ncclInt32, ncclUint32, ncclInt64, ncclUint64, ncclHalf, ncclFloat, ncclDouble};
@@ -39,6 +41,7 @@ static int nccltype = ncclFloat;
 static int ncclroot = 0;
 static int parallel_init = 0;
 static int blocking_coll = 0;
+static int latency = 0;
 
 double parsesize(char *value) {
     long long int units;
@@ -398,6 +401,7 @@ testResult_t completeColl(struct threadArgs* args) {
 
 testResult_t BenchTime(struct threadArgs* args, ncclDataType_t type, ncclRedOp_t op, int root, int in_place) {
   size_t count = args->nbytes / wordSize(type);
+  std::vector<long> iterDeltaNsec(iters);
 
   // Sync
   TESTCHECK(startColl(args, type, op, root, in_place, 0));
@@ -407,12 +411,18 @@ testResult_t BenchTime(struct threadArgs* args, ncclDataType_t type, ncclRedOp_t
 
   // Performance Benchmark
   auto start = std::chrono::high_resolution_clock::now();
+  auto iter_start = start;
   for (int iter = 0; iter < iters; iter++) {
     if (agg_iters>1) NCCLCHECK(ncclGroupStart());
     for (int aiter = 0; aiter < agg_iters; aiter++) {
       TESTCHECK(startColl(args, type, op, root, in_place, iter*agg_iters+aiter));
     }
     if (agg_iters>1) NCCLCHECK(ncclGroupEnd());
+    if (latency) {
+      auto iter_end = std::chrono::high_resolution_clock::now();
+      iterDeltaNsec[iter] = std::chrono::duration_cast<std::chrono::nanoseconds>(iter_end - iter_start).count();
+      iter_start = iter_end;
+    }
   }
   TESTCHECK(completeColl(args));
 
@@ -465,7 +475,14 @@ testResult_t BenchTime(struct threadArgs* args, ncclDataType_t type, ncclRedOp_t
   } else {
      PRINT("  %7s  %6.2f  %6.2f  %5s", timeStr, algBw, busBw, "N/A");
   }
-
+  if (latency & in_place) {
+     sort(iterDeltaNsec.begin(), iterDeltaNsec.end());
+     PRINT("  %7.2f  %7.2f  %7.2f  %7.2f",
+	   ((double)iterDeltaNsec[0])/1000,
+	   ((double)iterDeltaNsec[iters/2]/1000),
+	   ((double)iterDeltaNsec[9*iters/10])/1000,
+	   ((double)iterDeltaNsec[99*iters/100])/1000);
+  }
   args->bw[0] += busBw;
   args->bw_count[0]++;
   return testSuccess;
@@ -587,12 +604,13 @@ int main(int argc, char* argv[]) {
     {"datatype", required_argument, 0, 'd'},
     {"root", required_argument, 0, 'r'},
     {"blocking", required_argument, 0, 'z'},
-    {"help", no_argument, 0, 'h'}
+    {"latency", required_argument, 0, 'l'},
+    {"help", no_argument, 0, 'h'},
   };
 
   while(1) {
     int c;
-    c = getopt_long(argc, argv, "t:g:b:e:i:f:n:m:w:p:c:o:d:r:z:h", longopts, &longindex);
+    c = getopt_long(argc, argv, "t:g:b:e:i:f:n:m:w:p:c:o:d:r:z:l:h", longopts, &longindex);
 
     if (c == -1)
       break;
@@ -647,6 +665,9 @@ int main(int argc, char* argv[]) {
       case 'z':
         blocking_coll = strtol(optarg, NULL, 0);
         break;
+      case 'l':
+        latency = strtol(optarg, NULL, 0);
+        break;
       case 'h':
 	printf("USAGE: %s \n\t"
             "[-t,--nthreads <num threads>] \n\t"
@@ -664,6 +685,7 @@ int main(int argc, char* argv[]) {
             "[-d,--datatype <nccltype/all>] \n\t"
             "[-r,--root <root>] \n\t"
             "[-z,--blocking <0/1>] \n\t"
+            "[-l,--latency <0/1>] \n\t"
             "[-h,--help]\n",
 	    basename(argv[0]));
 	return 0;
@@ -685,6 +707,7 @@ int main(int argc, char* argv[]) {
             "[-d,--datatype <nccltype/all>] \n\t"
             "[-r,--root <root>] \n\t"
             "[-z,--blocking <0/1>] \n\t"
+            "[-l,--latency <0/1>] \n\t"
             "[-h,--help]\n",
 	    basename(argv[0]));
 	return 0;
